@@ -16,6 +16,7 @@ type notification struct {
 	Expiration time.Time `json:"exp"`
 }
 
+// TODO: add coroutine that goes through and removes expired notifications
 var notifications = []notification{
 	{ID: uuid.New(), Title: "Test", Message: "This is a test message :)", Tag: "testing", Expiration: time.Now()},
 	{ID: uuid.New(), Title: "Test2", Message: "This is another message", Tag: "testing", Expiration: time.Now()},
@@ -35,18 +36,40 @@ func postNotification(c *gin.Context) {
 
 	// set default expiration if not set manually
 	if newNotification.Expiration == (time.Time{}) {
-		var addTime, _ = time.ParseDuration("10min")
-		newNotification.Expiration = time.Now().Add(addTime)
+		newNotification.Expiration = time.Now().Add(10 * time.Minute)
 	}
 
 	notifications = append(notifications, newNotification)
 	c.IndentedJSON(http.StatusCreated, newNotification)
 }
 
+func cleanupExpiredNotifications() {
+	notExpired := []notification{}
+
+	now := time.Now()
+	for _, n := range notifications {
+		if n.Expiration.Local().After(now) {
+			notExpired = append(notExpired, n)
+		}
+
+	}
+
+	notifications = notExpired // I think because this is an assignment we don't have to use mutexes :)
+
+}
+
 func main() {
+	go func() {
+		for {
+			time.Sleep(20 * time.Second)
+			println("Cleaning up notifications")
+			cleanupExpiredNotifications()
+		}
+	}()
+
 	router := gin.Default()
 	router.GET("/notifications", getNotifications)
-	router.POST("/notifications", postNotification)
+	router.POST("/notification", postNotification)
 
 	router.Run("localhost:8080")
 }
